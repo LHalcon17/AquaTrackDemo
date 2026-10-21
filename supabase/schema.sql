@@ -6,9 +6,9 @@
 -- Inventory, Sales, Finance/HR) keep their own tables and talk to us through the
 -- production_events outbox.
 --
--- The Node server talks to these tables with the *service_role* key, which is
--- secret and never goes to the browser. Row Level Security is therefore not
--- required for this setup; do not put the service key in any HTML/JS file.
+-- The Node server talks to these tables with the anon key in config.json (or a
+-- service_role key in .env). Row Level Security is left off, so the shared anon
+-- key can read and write the demo data. Only put demo data in this database.
 -- ============================================================================
 
 create table if not exists public.production_products (
