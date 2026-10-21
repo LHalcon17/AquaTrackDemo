@@ -1,0 +1,5 @@
+{
+  "_readme": "Shared Supabase settings. The anon key is safe to publish. NEVER put the service_role key in this file - put it in .env instead (which is git-ignored).",
+  "SUPABASE_URL": "",
+  "SUPABASE_ANON_KEY": ""
+}
