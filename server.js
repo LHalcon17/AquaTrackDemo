@@ -49,7 +49,10 @@ try {
 
 const cfg = (key) => process.env[key] || fileConfig[key] || '';
 
-const SUPABASE_URL = String(cfg('SUPABASE_URL')).replace(/\/+$/, '');
+const SUPABASE_URL = String(cfg('SUPABASE_URL'))
+  .trim()
+  .replace(/\/+$/, '')
+  .replace(/\/rest\/v1$/, '');
 const SERVICE_KEY = cfg('SUPABASE_SERVICE_KEY');
 const ANON_KEY = cfg('SUPABASE_ANON_KEY');
 const SUPABASE_KEY = SERVICE_KEY || ANON_KEY;
