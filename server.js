@@ -128,6 +128,7 @@ async function init() {
       db = seed();
       await persist();
     }
+    await upgradeLegacyStages();
     return;
   }
 
@@ -143,6 +144,25 @@ async function init() {
     await persist();
     console.log('Seeded the Supabase database with the demo data.');
   }
+
+  await upgradeLegacyStages();
+}
+
+/**
+ * Orders created before the 4-stage rename still carry the old names.
+ * Rename them by position once so existing data matches the current process.
+ */
+async function upgradeLegacyStages() {
+  const legacy = new Set(['Filtering', 'Labeling']);
+  const stale = db.orders.filter((o) => Array.isArray(o.stages) && o.stages.some((s) => legacy.has(s.name)));
+  if (!stale.length) return;
+  for (const order of stale) {
+    const current = order.stages.findIndex((s) => s.name === order.stage);
+    order.stages = order.stages.map((s, i) => ({ ...s, name: STAGES[i] || s.name }));
+    if (current >= 0) order.stage = STAGES[current] || order.stage;
+  }
+  await persist('orders');
+  console.log(`Renamed process stages on ${stale.length} existing order(s).`);
 }
 
 /**
