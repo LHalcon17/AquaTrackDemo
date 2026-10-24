@@ -175,7 +175,7 @@ const uid = () => crypto.randomUUID();
 const nowISO = () => new Date().toISOString();
 const todayISO = () => nowISO().slice(0, 10);
 const round = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
-const STAGES = ['Purifying', 'Filtering', 'Bottling', 'Labeling'];
+const STAGES = ['Disinfection', 'Purifying', 'Bottling', 'Packaging'];
 
 function httpError(status, message) {
   const e = new Error(message);

@@ -1019,6 +1019,7 @@
         <th>BOM ID</th>
         <th>Product</th>
         <th>Materials</th>
+        <th>Material cost / unit</th>
         <th>Status</th>
       </tr>
     </thead>
@@ -1037,6 +1038,7 @@
             <li>Product label</li>
           </ul>
         </td>
+        <td><b>₱4.20</b><br><small class="dim">per unit</small></td>
         <td>
           <span class="badge b-ok">Active</span>
         </td>
@@ -1053,6 +1055,7 @@
             <li>Label</li>
           </ul>
         </td>
+        <td><b>₱2.10</b><br><small class="dim">per unit</small></td>
         <td>
           <span class="badge b-ok">Active</span>
         </td>
@@ -1069,6 +1072,7 @@
             <li>Label</li>
           </ul>
         </td>
+        <td><b>₱3.00</b><br><small class="dim">per unit</small></td>
         <td>
           <span class="badge b-ok">Active</span>
         </td>
@@ -1116,6 +1120,24 @@
   <div class="card">
     <div class="cardtitle">
       <h3>Production Order</h3>
+    </div>
+    <div class="fbar">
+      <div class="fsearch">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="7"/>
+          <path d="m20 20-3.5-3.5"/>
+        </svg>
+        <input id="poSearch" class="tsearch" placeholder="Search order or product...">
+      </div>
+      <select id="poStatus" class="tsel">
+        <option value="all">All statuses</option>
+        <option value="material_pending">Material request pending</option>
+        <option value="ready">Ready to start</option>
+        <option value="in_progress">In progress</option>
+        <option value="completed">Completed</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+      <span id="poCount" class="dim" style="font-size:12px"></span>
     </div>
     <table id="t-po">
       <thead>
@@ -1521,19 +1543,10 @@
       </div>
       
  <div class="rsteps">
-  <div><i class="sd done">
-
-  </i>Purifying <span class="ck">&#10003;</span>
-</div>
-<div>
-  <i class="sd done"></i>Filtering 
-  <span class="ck">&#10003;</span>
-</div>
-<div>
-  <i class="sd now"></i>Bottling
-</div>
-<div>
-  <i class="sd"></i>Labeling</div>
+  <div><i class="sd done"></i>Disinfection <span class="ck">&#10003;</span></div>
+  <div><i class="sd done"></i>Purifying <span class="ck">&#10003;</span></div>
+  <div><i class="sd now"></i>Bottling</div>
+  <div><i class="sd"></i>Packaging</div>
 </div>
 </div>
 </div>
@@ -1546,13 +1559,13 @@
 
  <div class="tli">
   <span class="mono">09:00</span>
-  <span>Purifying</span>
+  <span>Disinfection</span>
   <span class="badge b-ok">Completed</span>
 </div>
 
  <div class="tli">
   <span class="mono">10:20</span>
-  <span>Filtering</span>
+  <span>Purifying</span>
   <span class="badge b-ok">Completed</span>
 </div>
 
@@ -1564,7 +1577,7 @@
 
  <div class="tli">
   <span class="mono">12:00</span>
-  <span>Labeling</span>
+  <span>Packaging</span>
   <span class="badge b-warn">Pending</span>
 </div>
 </div>

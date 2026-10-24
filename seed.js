@@ -57,7 +57,7 @@ module.exports = function seed() {
     },
   ];
 
-  const STAGES = ['Purifying', 'Filtering', 'Bottling', 'Labeling'];
+  const STAGES = ['Disinfection', 'Purifying', 'Bottling', 'Packaging'];
   const stagesUpTo = (last) =>
     STAGES.map((name) => {
       const i = STAGES.indexOf(name);

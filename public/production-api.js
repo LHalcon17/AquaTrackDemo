@@ -13,6 +13,8 @@
   const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const num = (n) => Number(n || 0).toLocaleString('en-PH');
   const money = (n) => '₱' + Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Unit prices can be tiny (water = ₱0.075), so keep up to 4 decimals.
+  const price = (n) => '₱' + Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 
   const TONES = { ok: 'b-ok', blue: 'b-blue', warn: 'b-warn', bad: 'b-bad', purple: 'b-purple', dim: 'b-dim' };
   const badge = (text, tone = 'dim') => `<span class="badge ${TONES[tone] || 'b-dim'}">${esc(text)}</span>`;
@@ -187,23 +189,46 @@
     </tr>`));
   }
 
-  function renderBoms() {
-    setRows('t-bom', state.boms.map((b) => `<tr>
-      <td><span class="mono">${esc(b.code)}</span></td>
-      <td>${esc(b.product_name)}</td>
-      <td><ul class="mlist">${b.items.map((it) => `<li>${esc(it.material_name)}</li>`).join('')}</ul></td>
-      <td>${badge(b.status, b.status === 'Active' ? 'ok' : 'dim')}</td>
-    </tr>`));
+  function bomLineCost(it) {
+    return Number(it.qty_per_unit || 0) * Number(it.std_unit_cost || 0);
   }
 
+  function renderBoms() {
+    setRows('t-bom', state.boms.map((b) => {
+      const total = b.items.reduce((s, it) => s + bomLineCost(it), 0);
+      const lines = b.items.map((it) => `<li>
+        ${esc(it.material_name)}
+        <span class="dim">${num(it.qty_per_unit)} ${esc(it.uom)} &times; ${price(it.std_unit_cost)}</span>
+        <b>${money(bomLineCost(it))}</b>
+      </li>`).join('');
+      return `<tr>
+        <td><span class="mono">${esc(b.code)}</span></td>
+        <td>${esc(b.product_name)}</td>
+        <td><ul class="mlist">${lines}</ul></td>
+        <td><b>${money(total)}</b><br><small class="dim">per unit</small></td>
+        <td>${badge(b.status, b.status === 'Active' ? 'ok' : 'dim')}</td>
+      </tr>`;
+    }));
+  }
+
+  let poQuery = '';
+  let poStatus = 'all';
+
   function renderOrders() {
-    setRows('t-po', state.orders.map((o) => `<tr>
+    const q = poQuery.trim().toLowerCase();
+    const rows = state.orders.filter((o) =>
+      (poStatus === 'all' || o.status === poStatus) &&
+      (!q || `${o.code} ${o.product_name}`.toLowerCase().includes(q)),
+    );
+    setRows('t-po', rows.map((o) => `<tr>
       <td><span class="mono">${esc(o.code)}</span></td>
       <td>${esc(o.product_name)}</td>
       <td>${num(o.qty)}</td>
       <td><div class="progress" style="width:130px"><i style="width:${o.progress_pct}%"></i></div></td>
       <td>${orderBadge(o)}</td>
     </tr>`));
+    const count = $('#poCount');
+    if (count) count.textContent = `${rows.length} of ${state.orders.length} orders`;
   }
 
   function renderPlans() {
@@ -589,11 +614,19 @@
 
   /* ------------------------------------------------------------------ boot */
 
+  function wireOrderFilters() {
+    const search = $('#poSearch');
+    const status = $('#poStatus');
+    if (search) search.addEventListener('input', () => { poQuery = search.value; renderOrders(); });
+    if (status) status.addEventListener('change', () => { poStatus = status.value; renderOrders(); });
+  }
+
   async function boot() {
     try {
       await refresh();
       wireButtons();
       wireToolbars();
+      wireOrderFilters();
     } catch (err) {
       notify('Backend not reachable: ' + err.message);
       console.warn('[AquaTrack] run `node server.js` and open http://localhost:4000');
