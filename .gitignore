@@ -12,3 +12,6 @@ client/config.js
 # OS junk
 Thumbs.db
 .DS_Store
+
+# Local safety-net zip snapshots (not part of the app)
+backups/
