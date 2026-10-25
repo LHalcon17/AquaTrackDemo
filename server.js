@@ -161,8 +161,13 @@ async function upgradeLegacyStages() {
     order.stages = order.stages.map((s, i) => ({ ...s, name: STAGES[i] || s.name }));
     if (current >= 0) order.stage = STAGES[current] || order.stage;
   }
-  await persist('orders');
-  console.log(`Renamed process stages on ${stale.length} existing order(s).`);
+  try {
+    await persist('orders');
+    console.log(`Renamed process stages on ${stale.length} existing order(s).`);
+  } catch (err) {
+    // Never let a data fix stop the server from starting; it retries next boot.
+    console.error('Could not save renamed stages (will retry next start):', err.message);
+  }
 }
 
 /**
