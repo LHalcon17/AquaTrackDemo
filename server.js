@@ -444,13 +444,17 @@ async function completeOrder(orderId) {
   return { order, finished_goods: fg, cost_posting: posting };
 }
 
-async function cancelOrder(orderId) {
+async function cancelOrder(orderId, reason) {
   const order = need(db.orders, orderId, 'Order');
   if (order.status === 'completed') throw httpError(400, 'Completed orders cannot be cancelled');
+  if (order.status === 'cancelled') throw httpError(400, 'Order is already cancelled');
+  const why = String(reason || '').trim();
   order.status = 'cancelled';
   order.stage = 'Cancelled';
-  audit(`Cancelled ${order.code}`, order.code);
-  await persist(['orders', 'audit']);
+  order.notes = why ? `Cancelled: ${why}` : 'Cancelled';
+  audit(`Cancelled ${order.code}${why ? ` — ${why}` : ''}`, order.code);
+  emit('production.order_cancelled', 'sales', { order: order.code, reason: why || null });
+  await persist(['orders', 'audit', 'events']);
   return order;
 }
 
@@ -671,7 +675,7 @@ route('POST', '/api/orders/:id/start', ({ id }) => startOrder(id));
 route('POST', '/api/orders/:id/advance', ({ id }) => advanceStage(id));
 route('POST', '/api/orders/:id/output', ({ id }, _q, body) => recordOutput(id, body.qty_good, body.qty_rejected));
 route('POST', '/api/orders/:id/complete', ({ id }) => completeOrder(id));
-route('POST', '/api/orders/:id/cancel', ({ id }) => cancelOrder(id));
+route('POST', '/api/orders/:id/cancel', ({ id }, _q, body) => cancelOrder(id, body.reason));
 route('POST', '/api/orders/:id/material-request', ({ id }, _q, body) => generateMaterialRequest(id, body.qty_units));
 
 /* 4. Production planning */

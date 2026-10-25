@@ -15,6 +15,17 @@ node server.js
 
 Open <http://localhost:4000>. Delete `data.json` to reset back to the seed data.
 
+## Backups
+
+Snapshot the working files before a change:
+
+```bash
+npm run backup              # backups/aquatrack-snapshot-YYYY-MM-DD-HHMMSS.zip
+npm run backup -- cancel    # same, with a label
+```
+
+`backups/` is git-ignored, so the zips stay local and never bloat the repo.
+
 ## Files
 
 | File | What it is |
@@ -22,8 +33,9 @@ Open <http://localhost:4000>. Delete `data.json` to reset back to the seed data.
 | `server.js` | The whole backend: JSON store, business rules, REST API, static file server |
 | `seed.js` | Starting data that matches the numbers already in the UI mock-up |
 | `public/index.html` | The original UI, plus the client script and a few action toolbars |
-| `public/styles.css` | Original stylesheet, unchanged |
+| `public/styles.css` | Stylesheet, including the mobile layout rules |
 | `public/production-api.js` | Front-end glue: renders every Production screen from the API and wires the buttons |
+| `backup.ps1` | Creates a timestamped zip snapshot in `backups/` (`npm run backup`) |
 | `data.json` | Runtime data used when Supabase is not configured (delete to reset) |
 | `supabase/schema.sql` | The database tables — run once in Supabase |
 | `.env.example` | Template for your Supabase URL and service key |

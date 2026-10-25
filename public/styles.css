@@ -1477,3 +1477,52 @@ html[data-theme="dark"] .pfcrumb b{color:#e8f1ff}
     line-height:1.3;
     margin-top:2px
 }
+
+/* ===== MOBILE (phones and small tablets) ===== */
+@media (max-width: 860px) {
+  /* real visible height on phones (mobile browsers hide part of 100vh) */
+  .app { height: 100vh; height: 100dvh; }
+
+  .content { padding: 14px 12px 28px; }
+  .topbar { padding: 10px 12px; }
+
+  .navitem { justify-content: center; padding: 10px 0; }
+  .navitem.active::before { left: -6px; }
+
+  .pagehead { align-items: flex-start; gap: 10px; margin-bottom: 14px; }
+  .pagehead h2 { font-size: 18px; }
+  .pagehead > div:last-child { margin-left: 0 !important; width: 100%; }
+  .pagehead > div:last-child .btn { flex: 1; justify-content: center; }
+
+  .card { padding: 14px; border-radius: 12px; }
+
+  /* wide tables scroll sideways instead of squeezing into unreadable columns */
+  .card:has(table) { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .card:has(table) table { min-width: 540px; }
+
+  /* filters stack instead of overflowing */
+  .fbar { gap: 8px; }
+  .fsearch { flex: 1 1 100%; min-width: 0; }
+  .tsel { flex: 1 1 auto; min-width: 0; }
+
+  /* KPI tiles: two per row instead of fixed 148px squares */
+  .kpisq { gap: 10px; }
+  .kpisq .card {
+    width: calc(50% - 5px);
+    height: auto;
+    aspect-ratio: auto;
+    min-height: 112px;
+  }
+  .kpisq .kpi .val { font-size: 20px; }
+
+  .ptiles { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .ptile { min-height: 108px; padding: 14px; gap: 14px; }
+
+  .btn { min-height: 40px; }
+  .navitem { min-height: 44px; }
+
+  .ringwrap { flex-direction: column; align-items: center; gap: 14px; }
+  .rsteps, .tl { width: 100%; }
+
+  form { padding: 16px !important; }
+}

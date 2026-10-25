@@ -220,13 +220,20 @@
       (poStatus === 'all' || o.status === poStatus) &&
       (!q || `${o.code} ${o.product_name}`.toLowerCase().includes(q)),
     );
-    setRows('t-po', rows.map((o) => `<tr>
-      <td><span class="mono">${esc(o.code)}</span></td>
-      <td>${esc(o.product_name)}</td>
-      <td>${num(o.qty)}</td>
-      <td><div class="progress" style="width:130px"><i style="width:${o.progress_pct}%"></i></div></td>
-      <td>${orderBadge(o)}</td>
-    </tr>`));
+    setRows('t-po', rows.map((o) => {
+      const progress = o.status === 'cancelled'
+        ? '<span class="dim">&mdash;</span>'
+        : `<div class="progress" style="width:130px"><i style="width:${o.progress_pct}%"></i></div>`;
+      const reason = o.status === 'cancelled' && o.notes
+        ? `<div class="dim" style="font-size:11px;margin-top:4px">${esc(o.notes)}</div>` : '';
+      return `<tr>
+        <td><span class="mono">${esc(o.code)}</span></td>
+        <td>${esc(o.product_name)}</td>
+        <td>${num(o.qty)}</td>
+        <td>${progress}</td>
+        <td>${orderBadge(o)}${reason}</td>
+      </tr>`;
+    }));
     const count = $('#poCount');
     if (count) count.textContent = `${rows.length} of ${state.orders.length} orders`;
   }
@@ -581,7 +588,16 @@
     on('#poStart', () => run('start', 'Order started'));
     on('#poAdvance', () => run('advance', 'Stage advanced'));
     on('#poComplete', () => run('complete', 'Order completed — finished goods and cost posted'));
-    on('#poCancel', () => run('cancel', 'Order cancelled'));
+    on('#poCancel', () => {
+      const id = $('#poSelect')?.value;
+      if (!id) return notify('No production order selected');
+      openModal('Cancel Production Order', [
+        { name: 'reason', label: 'Reason (customer cancelled, wrong order, ...)', type: 'text', placeholder: 'Customer cancelled' },
+      ], (data) => action(
+        api(`/orders/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason: data.reason }) }),
+        'Order cancelled',
+      ));
+    });
     on('#poOutput', () => {
       const id = $('#poSelect')?.value;
       if (!id) return notify('No production order selected');

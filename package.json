@@ -5,7 +5,8 @@
   "description": "AquaTrack ERP - Production module backend (Node + Supabase, zero dependencies)",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "backup": "powershell -NoProfile -ExecutionPolicy Bypass -File backup.ps1"
   },
   "engines": {
     "node": ">=18"
