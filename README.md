@@ -1,251 +1,472 @@
-# AquaTrack ERP — Production module backend
+# AquaTrack ERP - Production Module
 
-A small, dependency-free backend for the **Production & Manufacturing** screens of
-`aquatrack-erp-ui_v3.html` (Team 3's module).
+The Production & Manufacturing module of the AquaTrack ERP. It manages the full
+production cycle from master data and planning through material requests,
+issuance, shop-floor execution, finished goods, costing, and reporting.
 
-* Node.js built-ins only — **no `npm install`**
-* Data lives in `data.json` (created automatically from `seed.js` on first run)
-* Serves the UI and a REST API from the same port
+The module deliberately owns **production only**. It consumes raw materials from
+Inventory and posts costs to Finance; it does not implement inventory or
+accounting itself. Those hand-offs happen through an event outbox.
 
-```bash
-cd "AquaTrack production"
-node server.js
-# -> AquaTrack Production backend running at http://localhost:4000
-```
+**Live demo:** <https://aquatrack-production.onrender.com>
 
-Open <http://localhost:4000>. Delete `data.json` to reset back to the seed data.
+> The live site runs on a free Render instance. It sleeps after ~15 minutes of
+> inactivity, so the first visit can take 30-60 seconds to wake up.
 
-## Backups
+---
 
-Snapshot the working files before a change:
+## What is in this repository
 
-```bash
-npm run backup              # backups/aquatrack-snapshot-YYYY-MM-DD-HHMMSS.zip
-npm run backup -- cancel    # same, with a label
-```
-
-`backups/` is git-ignored, so the zips stay local and never bloat the repo.
-
-## Files
-
-| File | What it is |
+| File | Purpose |
 |---|---|
-| `server.js` | The whole backend: JSON store, business rules, REST API, static file server |
-| `seed.js` | Starting data that matches the numbers already in the UI mock-up |
-| `public/index.html` | The original UI, plus the client script and a few action toolbars |
-| `public/styles.css` | Stylesheet, including the mobile layout rules |
-| `public/production-api.js` | Front-end glue: renders every Production screen from the API and wires the buttons |
-| `backup.ps1` | Creates a timestamped zip snapshot in `backups/` (`npm run backup`) |
-| `data.json` | Runtime data used when Supabase is not configured (delete to reset) |
-| `supabase/schema.sql` | The database tables — run once in Supabase |
-| `.env.example` | Template for your Supabase URL and service key |
+| `server.js` | Zero-dependency HTTP server, REST API, business rules, storage layer |
+| `seed.js` | Demo dataset used to populate an empty database |
+| `config.json` | Shared Supabase URL + publishable anon key (committed on purpose) |
+| `.env.example` | Template for a private local key (copy to `.env`, git-ignored) |
+| `supabase/schema.sql` | The 13 `production_*` tables, indexes, and grants |
+| `public/index.html` | UI shell: dashboard, 10 feature screens, all panels |
+| `public/production-api.js` | Front-end logic: API calls, rendering, event wiring |
+| `public/styles.css` | Styles, including the responsive/mobile rules |
+| `backup.ps1` | Creates a timestamped zip snapshot in `backups/` |
+| `package.json` | `npm start` and `npm run backup` scripts |
+| `.gitignore` | Excludes `data.json`, `.env`, `node_modules/`, `backups/` |
+| `.gitattributes` | LF line-ending normalization |
+| `README.md` | This file |
 
-## Configuring the database (do this once)
+There are no dependencies. `package.json` has no `dependencies` block, and the
+runtime is Node's built-in `http` plus the global `fetch`.
 
-The server reads its settings from `config.json` (committed) and optionally `.env`
-(not committed). Priority: environment variables → `.env` → `config.json`.
+Requirements: **Node.js 18 or newer**.
 
-### 1. Create the tables
+---
 
-1. Supabase → **SQL Editor → New query**.
-2. Paste the whole of `supabase/schema.sql` → **Run**.
-3. Expect *"Success. No rows returned"* and 13 `production_*` tables in **Table Editor**.
+## Quick start
 
-### 2. Fill in `config.json`
+```bash
+git clone https://github.com/LHalcon17/AquaTrackDemo.git
+cd AquaTrackDemo
+git checkout PRODUCTION
+npm start
+```
 
-Open **Settings → API** and copy the **Project URL** and the **anon / publishable**
-key (`sb_publishable_...`, or the long `eyJ...` key labelled `anon`):
+Then open <http://localhost:4000>.
+
+`npm start` is just `node server.js`. The port comes from `PORT` and defaults
+to `4000`.
+
+If the database is empty, `seed.js` supplies the demo data on first boot: 5
+products, 4 bills of materials, 3 production orders, material requests,
+issuances, machines, and finished goods.
+
+### Only one server at a time
+
+Everyone shares the same Supabase database. Because each server keeps an
+in-memory copy of the data and rewrites whole tables on every change, running
+your local copy while the live Render site is also running will make the two
+overwrite each other. Pick one:
+
+- use the live link, or
+- stop the Render service and run locally.
+
+Never both during a demo.
+
+---
+
+## Configuration
+
+Settings are resolved in this order, first match wins:
+
+1. **Real environment variables**
+2. **`.env`** - local only, git-ignored, may contain the private service key
+3. **`config.json`** - committed, contains the shared URL + publishable anon key
 
 ```json
 {
-  "SUPABASE_URL": "https://your-project-ref.supabase.co",
+  "SUPABASE_URL": "https://<project-ref>.supabase.co",
   "SUPABASE_ANON_KEY": "sb_publishable_...",
   "PORT": 4000
 }
 ```
 
-Commit it. That is what makes "clone and run" work for the whole team: anyone who
-clones the repo runs `node server.js` and is connected, with no `.env` and no setup.
+| Variable | Where it belongs | Public? |
+|---|---|---|
+| `SUPABASE_URL` | `config.json` | Yes |
+| `SUPABASE_ANON_KEY` | `config.json` | Yes - publishable key, protected by RLS |
+| `SUPABASE_SERVICE_KEY` | `.env` only | **No** - bypasses all security |
+| `PORT` | `config.json` / environment | Yes |
 
-### 3. Optional: your own admin key
+### Storage selection
 
-For local work you can put the **service_role / secret** key in `.env`. It overrides
-`config.json` and is git-ignored, so it is never committed:
+- If `SUPABASE_URL` **and** a key are present, data lives in Supabase.
+- Otherwise the server falls back to `data.json` and still runs offline.
 
-```env
-SUPABASE_URL=https://your-project-ref.supabase.co
-SUPABASE_SERVICE_KEY=sb_secret_...
+The fallback exists so the project can start with no configuration at all. It
+is a convenience for local experiments, not a second production database.
+
+### The service key
+
+The service role key bypasses Row Level Security. It must never appear in
+`config.json`, `public/`, or any committed file. `.env` is git-ignored for this
+reason. The committed anon key is safe to publish because it is only as
+powerful as the RLS policies allow.
+
+### Security posture (demo)
+
+Row Level Security is **off** on the shared demo database, and the anon key is
+committed, so anyone with the repo can read and write the demo data. That is an
+accepted trade-off for a classroom demo: no installs, no setup, no secrets to
+distribute.
+
+**Never put real or personal data in this database.** If the project ever moves
+past demo, the order is: enable RLS with policies first, then remove
+`config.json` from the repository and distribute the config privately.
+
+---
+
+## Database schema
+
+13 tables, all prefixed `production_` so they can share a Supabase project with
+the other modules. Defined in `supabase/schema.sql`.
+
+| Table | Holds |
+|---|---|
+| `production_products` | Product master: code, name, category, unit, price |
+| `production_boms` | Bill of materials per product; items stored as JSON |
+| `production_orders` | Production orders, stage list, output records |
+| `production_plans` | Production schedule entries |
+| `production_material_requests` | Material requests exploded from the BOM |
+| `production_issuances` | Materials actually released to the floor |
+| `production_machines` | Machine/line records and their status |
+| `production_finished_goods` | Output that entered stock |
+| `production_cost_rates` | Labor and machine cost per unit, per product |
+| `production_cost_summaries` | Period cost summaries |
+| `production_cost_postings` | Cost posted to Finance on completion |
+| `production_audit` | Action log, capped at the newest 200 rows |
+| `production_events` | Outbox for Inventory / Finance / Sales events |
+
+To set up a fresh project: run `supabase/schema.sql` in the Supabase SQL
+editor, then start the server. The schema grants access to `anon` and creates
+the indexes the queries rely on.
+
+`production_audit.user` is stored in a column named `actor`, because `user` is
+reserved in Postgres. The server maps between the two.
+
+---
+
+## Order lifecycle
+
+```
+material_pending  ──(materials fully issued)──►  ready
+       │                                          │
+       │                                          ▼
+       │                                    in_progress
+       │                                          │
+       ▼                                          ▼
+   cancelled ◄────(cancel with reason)──────  completed
 ```
 
-### 4. Run it
+| Status | Meaning |
+|---|---|
+| `material_pending` | Order created; materials not yet fully issued |
+| `ready` | All requested materials issued; the order can start |
+| `in_progress` | Running through the four stages |
+| `completed` | All stages done, output recorded, FG + cost posting created |
+| `cancelled` | Cancelled with a reason; stays visible in the list |
+
+Cancelled orders are never hidden. The reason is stored in `notes` and shown
+under the status badge.
+
+### The four stages
+
+```
+Disinfection  →  Purifying  →  Bottling  →  Packaging
+```
+
+Progress is `completed stages / 4`, rounded to a percentage. Orders created
+under the old stage names are renamed positionally on startup, and that
+migration is fail-safe: if it fails it logs and retries next boot rather than
+blocking startup.
+
+### The full chain
+
+1. **Product Master** - define what is produced.
+2. **Bill of Materials** - define the recipe and material costs.
+3. **Production Planning** - schedule a run; convert it to an order.
+4. **Production Order** - the work itself: start, advance, output, complete.
+5. **Material Requirement** - explode the BOM into a request for the order.
+6. **Material Issuance** - release materials; the order flips to `ready`.
+7. **Production Monitoring** - stage progress, timeline, machine status.
+8. **Finished Goods** - output recorded, usually automatically on completion.
+9. **Production Costing** - standard cost per product, period costing.
+10. **Production Reports** - summary, material usage, cost, finished goods.
+
+Completing an order writes three things in one transaction:
+
+- a `production_finished_goods` row (`In Stock`) for the produced quantity,
+- a `production_cost_postings` row (`units x unit cost`, status `Pending`),
+- audit entries, plus outbox events for Inventory and Finance.
+
+### Costing formula
+
+```
+unit cost = sum(bom qty_per_unit x std_unit_cost)
+          + labor_per_unit
+          + machine_per_unit
+```
+
+Material cost is derived from the active BOM every time; labor and machine
+rates come from `production_cost_rates`. Nothing is stored as a hardcoded
+total.
+
+Current demo values:
+
+| Product | Material | Labor | Machine | Total |
+|---|---|---|---|---|
+| 5-gal Refill | 4.20 | 1.50 | 1.10 | **6.80** |
+| 50 ml Bottled | 2.10 | 0.80 | 0.60 | **3.50** |
+| 1 L Bottled | 3.00 | 1.00 | 0.90 | **4.90** |
+
+On completion the posting is `produced units x total unit cost`.
+
+### Outbox events
+
+The module writes to `production_events` instead of calling other modules
+directly. Each row has `source_module: 'production'`, a status of `pending`, and
+an event type:
+
+| Event | Target module | Fired when |
+|---|---|---|
+| `production.material_requested` | inventory | A material request is generated |
+| `production.material_issued` | inventory | Materials are issued |
+| `production.finished_goods_recorded` | inventory | FG is recorded (auto or manual) |
+| `production.order_completed` | finance | An order completes, with cost totals |
+| `production.order_cancelled` | sales | An order is cancelled, with the reason |
+
+---
+
+## API reference
+
+37 endpoints, all JSON, all under `/api`. Errors return a JSON `{ "error": ... }`
+with a 4xx/5xx status.
+
+**System**
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/health` | Storage mode, key kind, project URL, server time |
+| GET | `/api/bootstrap` | Everything the UI needs in one call |
+| GET | `/api/dashboard` | KPI payload |
+
+**Products and BOM**
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/products` | List products |
+| POST | `/api/products` | Create a product |
+| PATCH | `/api/products/:id` | Update a product |
+| GET | `/api/boms` | List bills of materials |
+| POST | `/api/boms` | Create a BOM |
+
+**Orders**
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/orders` | List orders |
+| POST | `/api/orders` | Create an order |
+| GET | `/api/orders/:id/timeline` | Stage timeline with timestamps |
+| POST | `/api/orders/:id/start` | Start the first stage |
+| POST | `/api/orders/:id/advance` | Complete the current stage, start the next |
+| POST | `/api/orders/:id/output` | Record good/rejected quantities |
+| POST | `/api/orders/:id/complete` | Complete, create FG and cost posting |
+| POST | `/api/orders/:id/cancel` | Cancel with a reason |
+| POST | `/api/orders/:id/material-request` | Generate the material request |
+
+**Planning**
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/plans` | List plans |
+| POST | `/api/plans` | Create a plan |
+| POST | `/api/plans/:id/convert` | Convert a plan into a production order |
+
+**Material requirement and issuance**
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/material-requests` | List requests |
+| POST | `/api/material-requests` | Generate a request for an order |
+| POST | `/api/material-requests/:id/approve` | Approve |
+| POST | `/api/material-requests/:id/reject` | Reject |
+| GET | `/api/issuances` | List issuances |
+| POST | `/api/issuances` | Issue materials against an approved request |
+
+**Machines and finished goods**
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/machines` | List machines |
+| PATCH | `/api/machines/:id` | Change status (Online / Under Maintenance) |
+| GET | `/api/finished-goods` | List finished goods |
+| POST | `/api/finished-goods` | Record FG manually |
+
+**Costing and reports**
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/costing/standard` | Standard cost per active product |
+| POST | `/api/costing/calculate` | Period cost summary |
+| GET | `/api/reports/summary` | Orders completed, units, rejected, yield |
+| GET | `/api/reports/material-usage` | Usage aggregated by material |
+| GET | `/api/reports/cost` | Cost report for a period |
+| GET | `/api/reports/finished-goods` | Finished goods report |
+
+**Audit and events**
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/audit` | Newest 200 audit entries |
+| GET | `/api/events` | Outbox rows |
+
+### API guards
+
+Business rules are enforced on the server, not in the UI:
+
+- An order cannot start until materials are fully issued.
+- A stage cannot advance if no stage is running.
+- Issuance requires an approved request.
+- A completed order cannot be cancelled.
+- Output cannot exceed the order quantity.
+
+### Health check
+
+`GET /api/health` is the fastest way to diagnose a setup problem:
+
+```json
+{
+  "ok": true,
+  "storage": "supabase",
+  "key": "anon",
+  "project": "https://<project-ref>.supabase.co",
+  "time": "2026-11-12T04:02:23.254Z"
+}
+```
+
+If `storage` is `json`, the server did not find a URL and key and is running on
+the local fallback. If the server exits on startup, the console prints a
+checklist: project URL, whether `schema.sql` was run, key type, and grants.
+
+---
+
+## Backups
+
+Every change to the app should be preceded by a snapshot. Backups are zip files
+of the source, config, schema, and public assets, written to `backups/`, which
+is git-ignored. They are never committed and never deployed.
 
 ```bash
-node server.js
+npm run backup                  # label: snapshot
+npm run backup -- before-ui     # label: before-ui
 ```
 
-```
-AquaTrack Production backend running at http://localhost:4000
-Storage: Supabase https://xxxx.supabase.co (anon key)
-Seeded the Supabase database with the demo data.
-```
+Output: `backups/aquatrack-<label>-<timestamp>.zip`.
 
-Check with:
+The archive contains `server.js`, `seed.js`, `package.json`, `config.json`,
+`README.md`, `public/`, and `supabase/`. It does **not** contain `data.json`
+because that is runtime state, not source.
 
-```bash
-curl http://localhost:4000/api/health
-# {"ok":true,"storage":"supabase","key":"anon","project":"https://xxxx.supabase.co", ...}
-```
+Restore by unzipping over the project folder. Do not restore while a server is
+running.
 
-On the first run against an empty database the server uploads the demo data, so the
-UI is not blank.
+---
 
-> **What the two keys mean**
->
-> | Key | Where it goes | Safe to share? |
-> |---|---|---|
-> | `anon` / publishable | `config.json` (committed) | Yes — it is public by design |
-> | `service_role` / secret | `.env` (git-ignored) only | **No — it bypasses all security** |
->
-> Because the anon key is in the repo and the tables have Row Level Security off,
-> **this database is demo data only**. Anyone with repo access can read, change or
-> delete its rows. Never put real or personal data in it. If a secret key is ever
-> committed, rotate it immediately in **Settings → API**.
+## Deployment
 
-If both `config.json` and `.env` are empty, the server quietly falls back to
-`data.json`, so the app still runs offline.
+The live site is deployed on **Render** from a GitHub copy of this project:
+
+| Setting | Value |
+|---|---|
+| Repository | `LHalcon17/AquaTrackDemo` |
+| Branch | `PRODUCTION` |
+| Build command | none (no dependencies) |
+| Start command | `node server.js` |
+| Node version | 18 or newer |
+
+The runtime discovers `PORT` from Render's environment, so no code change is
+needed between local and hosted. `config.json` supplies the same Supabase
+project, which is why locally created data appears on the live site - they
+share one database.
+
+Pushing to that branch triggers a redeploy. Pushing to the original team repo
+does not. Check the deployed commit against your local HEAD if a change does
+not appear.
+
+Only one instance may run at a time - see "Only one server at a time" above.
+
+---
 
 ## Working with the rest of the team
 
-Everyone clones the same repo and checks out their own branch:
+The Production module lives on its own branch and only owns `production_*`
+tables. Other modules add their own tables to the same Supabase project and
+communicate through the `production_events` outbox.
 
-```bash
-git clone https://github.com/panganibanarjay6/AQUATRACK.git
-cd AQUATRACK
-git checkout PRODUCTION          # or PROCUREMENT, INVENTORY, ...
-node server.js
-```
+Rules of thumb:
 
-They get the shared Supabase database from `config.json` automatically. Teams 1, 2,
-4 and 5 add their own tables to the same Supabase project; the `production_events`
-table is the outbox the Production module writes for Inventory and Finance.
+- Commit only to your own branch.
+- Never `git push --force`.
+- Never push to `main`.
+- Never commit `.env`, `data.json`, `backups/`, or any service key.
+- Run `npm run backup` before a significant change.
 
-Only commit code to your own branch. Never `git push --force`, and never push to
-`main`.
+---
 
-## What the UI features map to
+## Feature-to-code map
 
-| # | Screen | API |
-|---|---|---|
-| 1 | Product Master | `GET/POST /api/products`, `PATCH /api/products/:id` |
-| 2 | Bill of Materials | `GET/POST /api/boms` |
-| 3 | Production Order | `GET/POST /api/orders`, `POST /api/orders/:id/{start,advance,output,complete,cancel}` |
-| 4 | Production Planning | `GET/POST /api/plans`, `POST /api/plans/:id/convert` |
-| 5 | Material Requirement | `GET/POST /api/material-requests`, `POST /api/material-requests/:id/{approve,reject}` |
-| 6 | Material Issuance | `GET /api/issuances`, `POST /api/issuances` |
-| 7 | Production Monitoring | `GET /api/machines`, `PATCH /api/machines/:id`, `GET /api/orders/:id/timeline` |
-| 8 | Finished Goods | `GET/POST /api/finished-goods` |
-| 9 | Production Costing | `GET /api/costing/standard`, `POST /api/costing/calculate` |
-| 10 | Production Reports | `GET /api/reports/{summary,material-usage,cost,finished-goods}` |
-| — | Dashboard KPIs | `GET /api/dashboard` or `GET /api/bootstrap` |
-| — | Cross-module hand-off | `GET /api/events` (outbox for Inventory / Finance) |
-| — | Audit Trail | `GET /api/audit` |
+| # | Screen | API | Front-end |
+|---|---|---|---|
+| 1 | Product Master | `/api/products` | `renderProducts()` |
+| 2 | Bill of Materials | `/api/boms` | `renderBoms()` |
+| 3 | Production Order | `/api/orders/*` | `renderOrders()` |
+| 4 | Production Planning | `/api/plans/*` | `renderPlans()` |
+| 5 | Material Requirement | `/api/material-requests/*` | `renderMaterialRequests()` |
+| 6 | Material Issuance | `/api/issuances` | `renderIssuances()` |
+| 7 | Production Monitoring | `/api/orders`, `/api/machines` | `renderMonitoring()` |
+| 8 | Finished Goods | `/api/finished-goods` | `renderFinishedGoods()` |
+| 9 | Production Costing | `/api/costing/*` | `renderCosting()` |
+| 10 | Production Reports | `/api/reports/*` | report handlers + CSV export |
 
-`GET /api/bootstrap` returns everything the ten screens need in one call; the client
-re-fetches it after every change.
+All front-end calls go through one helper, `api()`, in
+`public/production-api.js`. A single `refresh()` pulls `/api/bootstrap` and
+re-renders every panel, so a change on one screen is reflected everywhere after
+the next action.
 
-## The production order life-cycle
+---
 
-```
-draft/material_pending --generate request--> MR pending
-       --approve--> MR approved --issue--> ready --start--> in_progress
-       --> completed   (finished goods + cost posting + events are created automatically)
-```
+## Known limitations
 
-Rules enforced by the server (not just the UI):
+These are deliberate scope boundaries for the demo, not hidden defects. Worth
+knowing before a system check:
 
-* an order must have an **active BOM** before it can be created
-* materials can only be issued against an **approved** request (once only)
-* an order can only `start` when it is `ready`
-* `complete` only works on an `in_progress` order, and it then writes a finished-goods
-  record, a cost posting, an audit line and two integration events
+- **Authentication is not implemented.** The audit actor is a hardcoded
+  placeholder (`C. Mendoza`). Login-before-submission was deferred.
+- **The audit log keeps the newest 200 entries.** Older entries are dropped.
+- **Inventory is not deducted.** The module records issuance and emits an
+  event; stock deduction belongs to the Inventory module.
+- **"Delivered" status and notifications are not built.** An order ends at
+  `completed`; delivery is a Sales concern.
+- **The app refreshes on action, not on a timer.** The "Live" badge on
+  Monitoring reflects that data is current as of the last action, not that it
+  polls continuously.
+- **Reports export client-side.** `Export` builds a CSV in the browser from
+  data already fetched; no server-side file is generated.
+- **Only Production is wired to the backend.** The other modules in the shared
+  UI are visual placeholders and show a toast.
+- **RLS is off and the anon key is public.** Demo data only.
+- **One server at a time.** Multiple instances against the shared database will
+  overwrite each other.
 
-### Try the whole flow with curl / PowerShell
+---
 
-```bash
-# 1. create an order
-curl -X POST localhost:4000/api/orders -H "Content-Type: application/json" \
-     -d '{"product_id":"p3","qty":300}'
+## License
 
-# 2. explode its BOM into a material request   (order_id from step 1)
-curl -X POST localhost:4000/api/material-requests -H "Content-Type: application/json" \
-     -d '{"order_id":"<ORDER_ID>"}'
-
-# 3. approve it, then issue the stock out      (request_id from step 2)
-curl -X POST localhost:4000/api/material-requests/<MR_ID>/approve
-curl -X POST localhost:4000/api/issuances -H "Content-Type: application/json" \
-     -d '{"request_id":"<MR_ID>"}'
-
-# 4. run the order
-curl -X POST localhost:4000/api/orders/<ORDER_ID>/start
-curl -X POST localhost:4000/api/orders/<ORDER_ID>/advance
-curl -X POST localhost:4000/api/orders/<ORDER_ID>/output -H "Content-Type: application/json" \
-     -d '{"qty_good":290,"qty_rejected":10}'
-curl -X POST localhost:4000/api/orders/<ORDER_ID>/complete
-```
-
-Errors come back as `{"error":"..."}` with a 400/404 status.
-
-## In the UI, what is wired up
-
-* every table is rendered from the API (products, BOMs, orders, plans, requests,
-  issuances, machines, finished goods, costing, audit)
-* the four hub KPI cards, the monitoring ring/timeline/machines and the
-  Order Progress cards
-* the October 2026 planning calendar marks days that have plans (click a day to filter)
-* **+ buttons** open a small modal and post to the API
-* **Order actions** toolbar: Start / Advance stage / Record output / Complete / Cancel
-* **Request actions** toolbar: Approve / Reject
-* **Plan actions** toolbar: Convert to Order
-* clicking a row in Machine Status flips Online ⇄ Under Maintenance
-* **Calculate Cost** and the four report cards (view + CSV export)
-
-## Production costing
-
-Material cost comes from the BOM (`qty_per_unit × std_unit_cost`), labour and machine
-cost from `cost_rates`. The standard cost table therefore reproduces the UI's numbers:
-
-| Product | Material | Labour | Machine | Total |
-|---|---|---|---|---|
-| 5-gal Refill Water | ₱4.20 | ₱1.50 | ₱1.10 | **₱6.80** |
-| 50 ml Bottled Water | ₱2.10 | ₱0.80 | ₱0.60 | **₱3.50** |
-| 1 L Bottled Water | ₱3.00 | ₱1.00 | ₱0.90 | **₱4.90** |
-
-## Outbox events (for Teams 2 and 5)
-
-| event_type | target | when |
-|---|---|---|
-| `production.material_requested` | inventory | a material request is generated |
-| `production.material_issued` | inventory | each issuance line |
-| `production.finished_goods_recorded` | inventory | goods recorded (manual or auto on completion) |
-| `production.order_completed` | finance | order completed (with unit / total cost) |
-
-## Things I noticed while reviewing the UI
-
-1. **Two different unit costs.** The dashboard badge and `JE-2213` imply ₱9.80/gallon,
-   but the Production Costing screen (and this backend's BOM + rate data) gives **₱6.80**.
-   `18,228 / 1,860 = 9.80`, so the journal entry is the odd one out.
-2. **Product Master's "Price" column is really a cost.** 5-gal refill shows ₱9.80 while
-   Sales sells `SO-1338` at `7,200 / 120 = ₱60`. The column should be relabelled (cost)
-   or fed from Sales.
-3. **PRO-0219 disagrees with itself**: the order list says *Purifying*, Monitoring says
-   *Bottling*; progress is 64% in one place and 75% in another. The backend computes one
-   value from the stage list.
-4. **Quantities don't reconcile.** BOM says 20 L of treated water per 5-gal gallon, but
-   `ISS-001` issues only `20 L` for a 1,860-gallon run.
-5. **Broken HTML in the mock-up** (e.g. `</div` + newline + `>`, `<td class="mut">…<td>`,
-   `<th>Credit</th` … ) — browsers recover, but it is fragile to edit.
-6. **Placeholders everywhere.** Search boxes, Filter buttons, `.tag` counters (2, 3) and
-   the sidebar do nothing; the page date is hard-coded ("Sunday, Sep 27, 2026", the
-   calendar says October 2026).
-7. **Accessibility.** `.navitem`s are clickable `div`s — no `tabindex`, no `role`, no
-   keyboard support — and the icon-only buttons have no `aria-label`.
+Internal academic project. Not for redistribution.
